@@ -1,0 +1,132 @@
+# docker-compose for W4A16-MTP 2x DGX Spark — use head/worker profiles
+# head:   docker compose --profile head up -d
+# worker: ssh worker docker compose --profile worker up -d (repo synced via ./start.sh)
+# Requires .env and weights already at MODEL_HOST_PATH on both nodes.
+# KV NOTE: HF pinned KV_CACHE_MEMORY=9663676416 (9GiB) but the pin bypasses the activation check.
+# On OOM in >3K prefill, leave KV_CACHE_MEMORY empty in .env (profiler sizes it).
+name: glm53-w4a16-mtp-2x-spark
+services:
+  vllm-head:
+    image: ${IMAGE:-radixark/vllm-glm53-flash:sm121-v11-dflash2}
+    container_name: vllm_glm53_w4a16
+    network_mode: host
+    ipc: host
+    shm_size: 32g
+    cap_add: [IPC_LOCK]
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    devices: [/dev/infiniband:/dev/infiniband]
+    volumes:
+      - ${MODEL_HOST_PATH:-/var/tmp/glm-5.3-flash-w4a16-mtp}:/models/glm-5.3-flash-w4a16-mtp:ro
+      - ${DFLASH_HOST_PATH:-/var/tmp/models/GLM-5.3-Flash-DFlash2}:/models/dflash2-draft:ro
+      - ${CACHE_HOST_PATH:-/var/tmp/glm53-w4a16-cache}:/cache
+      - ${CACHE_HOST_PATH:-/var/tmp/glm53-w4a16-cache}/root-cache:/root/.cache
+      - ${PATCH_KPOOL_HOST:-/dev/null}:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/sparse_attn_indexer_kpool.py:ro
+    environment:
+      VLLM_HOST_IP: ${HEAD_IP:-10.100.24.2}
+      HF_HOME: /cache/huggingface
+      TORCHINDUCTOR_CACHE_DIR: /cache/torchinductor
+      TILELANG_CACHE_DIR: /cache/tilelang
+      HF_HUB_OFFLINE: 1
+      TRANSFORMERS_OFFLINE: 1
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: ${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-3600}
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      TORCH_CUDA_ARCH_LIST: 12.1a
+      FLASHINFER_CUDA_ARCH_LIST: 12.1a
+      FLASHINFER_DISABLE_VERSION_CHECK: 1
+      NCCL_NET: IB
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_HCA: ${HEAD_CX7_IB:-rocep1s0f0}
+      NCCL_IB_GID_INDEX: ${HEAD_GID:-3}
+      NCCL_IB_ROCE_VERSION_NUM: 2
+      NCCL_IB_ADDR_FAMILY: AF_INET
+      NCCL_IB_ADDR_RANGE: 10.100.24.0/24
+      NCCL_SOCKET_IFNAME: ${HEAD_CX7_IF:-enp1s0f0np0}
+      GLOO_SOCKET_IFNAME: ${HEAD_CX7_IF:-enp1s0f0np0}
+      TP_SOCKET_IFNAME: ${HEAD_CX7_IF:-enp1s0f0np0}
+      MN_IF_NAME: ${HEAD_CX7_IF:-enp1s0f0np0}
+      NCCL_NVLS_ENABLE: 0
+      NCCL_CROSS_NIC: 0
+      NCCL_CUMEM_ENABLE: 0
+      NCCL_IGNORE_CPU_AFFINITY: 1
+      NCCL_DEBUG: WARN
+    # For MOE_BACKEND=marlin add: --moe-backend marlin  (empty = auto)
+    # For ENABLE_EXPERT_PARALLEL=1 add: --enable-expert-parallel
+    command: >
+      /models/glm-5.3-flash-w4a16-mtp
+      --served-model-name ${SERVED_MODEL_NAME:-glm-5.3-flash}
+      --host 0.0.0.0 --port ${PORT:-8000}
+      --trust-remote-code
+      --tensor-parallel-size 2
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.85}
+      --max-model-len ${MAX_MODEL_LEN:-1048576}
+      --max-num-seqs ${MAX_NUM_SEQS:-6} --block-size ${BLOCK_SIZE:-2304}
+      --kv-cache-dtype ${KV_CACHE_DTYPE:-fp8_e4m3} --kv-cache-memory ${KV_CACHE_MEMORY:-9663676416}
+      --enforce-eager --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS:-8192}
+      --speculative-config {"method":"dflash","model":"/models/dflash2-draft","num_speculative_tokens":7}
+      --reasoning-parser glm45 --tool-call-parser glm47 --enable-auto-tool-choice
+      --chat-template /models/glm-5.3-flash-w4a16-mtp/chat_template_mm.jinja
+      --distributed-executor-backend mp --nnodes 2 --node-rank 0 --master-addr ${HEAD_IP:-10.100.24.2} --master-port ${MASTER_PORT:-29521}
+    profiles: [head]
+    restart: "no"
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+
+  vllm-worker:
+    image: ${IMAGE:-radixark/vllm-glm53-flash:sm121-v11-dflash2}
+    container_name: vllm_glm53_w4a16
+    network_mode: host
+    ipc: host
+    shm_size: 32g
+    cap_add: [IPC_LOCK]
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    devices: [/dev/infiniband:/dev/infiniband]
+    volumes:
+      - ${MODEL_HOST_PATH:-/var/tmp/glm-5.3-flash-w4a16-mtp}:/models/glm-5.3-flash-w4a16-mtp:ro
+      - ${DFLASH_HOST_PATH:-/var/tmp/models/GLM-5.3-Flash-DFlash2}:/models/dflash2-draft:ro
+      - ${CACHE_HOST_PATH:-/var/tmp/glm53-w4a16-cache}:/cache
+      - ${CACHE_HOST_PATH:-/var/tmp/glm53-w4a16-cache}/root-cache:/root/.cache
+      - ${PATCH_KPOOL_HOST:-/dev/null}:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/sparse_attn_indexer_kpool.py:ro
+    environment:
+      VLLM_HOST_IP: ${WORKER_IP:-10.100.24.1}
+      HF_HOME: /cache/huggingface
+      TORCHINDUCTOR_CACHE_DIR: /cache/torchinductor
+      TILELANG_CACHE_DIR: /cache/tilelang
+      HF_HUB_OFFLINE: 1
+      TRANSFORMERS_OFFLINE: 1
+      VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: ${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-3600}
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      TORCH_CUDA_ARCH_LIST: 12.1a
+      FLASHINFER_CUDA_ARCH_LIST: 12.1a
+      NCCL_NET: IB
+      NCCL_IB_HCA: ${WORKER_CX7_IB:-rocep1s0f0}
+      NCCL_IB_GID_INDEX: ${WORKER_GID:-3}
+      NCCL_SOCKET_IFNAME: ${WORKER_CX7_IF:-enp1s0f0np0}
+      GLOO_SOCKET_IFNAME: ${WORKER_CX7_IF:-enp1s0f0np0}
+    command: >
+      /models/glm-5.3-flash-w4a16-mtp
+      --served-model-name ${SERVED_MODEL_NAME:-glm-5.3-flash}
+      --host 0.0.0.0 --port ${PORT:-8000}
+      --trust-remote-code
+      --tensor-parallel-size 2
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.85}
+      --max-model-len ${MAX_MODEL_LEN:-1048576}
+      --max-num-seqs ${MAX_NUM_SEQS:-6} --block-size ${BLOCK_SIZE:-2304}
+      --kv-cache-dtype ${KV_CACHE_DTYPE:-fp8_e4m3} --kv-cache-memory ${KV_CACHE_MEMORY:-9663676416}
+      --enforce-eager --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS:-8192}
+      --speculative-config {"method":"dflash","model":"/models/dflash2-draft","num_speculative_tokens":7}
+      --reasoning-parser glm45 --tool-call-parser glm47 --enable-auto-tool-choice
+      --chat-template /models/glm-5.3-flash-w4a16-mtp/chat_template_mm.jinja
+      --distributed-executor-backend mp --nnodes 2 --node-rank 1 --master-addr ${HEAD_IP:-10.100.24.2} --master-port ${MASTER_PORT:-29521}
+      --headless
+    profiles: [worker]
+    restart: "no"
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]

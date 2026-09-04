@@ -1,0 +1,7 @@
+OK   : Using CompressedTensorsWNA16MoEMethod
+OK   : Using Eagle3 auxiliary layers from config: (6, 15, 25, 34, 43)
+OK   : Resolved architecture: DFlash2DraftModel
+OK   : Draft model DFlash2Qwen3ForCausalLM
+OK   : DFlash2 classes active (not DFlash1)
+OK   : no hard errors in log
+OK   : API serving on http://127.0.0.1:8000

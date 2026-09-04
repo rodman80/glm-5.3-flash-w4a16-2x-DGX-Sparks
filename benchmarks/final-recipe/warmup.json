@@ -1,0 +1,2 @@
+{"run": 1, "ttft_s": 0.4524, "total_s": 17.4924, "completion_tokens": 512, "decode_tok_s": 29.988}
+{"summary": true, "runs": 1, "decode_tok_s_median": 29.988, "decode_tok_s_mean": 29.988, "ttft_s_median": 0.4524}
