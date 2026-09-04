@@ -1,0 +1,14 @@
+# Local environment (your IPs, paths, tokens) — never commit. Copy .env.example.
+.env
+
+# Verbose / regenerable run logs (bench/bench_config.sh regenerates them).
+# Curated results (*.json, *.txt, RESULTS.md) ARE committed.
+*.log
+
+# Python / tooling
+__pycache__/
+*.pyc
+.venv/
+*.jsonl
+.DS_Store
+.cache/
