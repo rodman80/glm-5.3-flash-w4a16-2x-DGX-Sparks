@@ -1,0 +1,14 @@
+[
+ {
+  "run": 0,
+  "prompt_tokens": 100001,
+  "ttft_s": 59.83,
+  "prefill_tok_s": 1671.3
+ },
+ {
+  "run": 1,
+  "prompt_tokens": 100001,
+  "ttft_s": 59.34,
+  "prefill_tok_s": 1685.2
+ }
+]

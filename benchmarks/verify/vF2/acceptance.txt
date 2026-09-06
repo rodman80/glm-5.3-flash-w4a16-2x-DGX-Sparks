@@ -1,0 +1,8 @@
+spec_decode metrics found:
+  vllm:spec_decode_num_accepted_tokens_per_pos_total = 7.0
+  vllm:spec_decode_num_accepted_tokens_total = 115.0
+  vllm:spec_decode_num_draft_tokens_total = 224.0
+  vllm:spec_decode_num_drafts_total = 32.0
+
+drafted=224 accepted=115 ratio=0.513
+check band manually

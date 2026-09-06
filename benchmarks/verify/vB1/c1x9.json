@@ -1,0 +1,10 @@
+{"run": 1, "ttft_s": 0.2627, "total_s": 17.7619, "completion_tokens": 512, "decode_tok_s": 29.201}
+{"run": 2, "ttft_s": 0.2425, "total_s": 18.4581, "completion_tokens": 512, "decode_tok_s": 28.053}
+{"run": 3, "ttft_s": 0.3301, "total_s": 16.6038, "completion_tokens": 512, "decode_tok_s": 31.4}
+{"run": 4, "ttft_s": 0.3585, "total_s": 15.4501, "completion_tokens": 512, "decode_tok_s": 33.86}
+{"run": 5, "ttft_s": 0.2331, "total_s": 17.604, "completion_tokens": 512, "decode_tok_s": 29.417}
+{"run": 6, "ttft_s": 0.3351, "total_s": 16.5281, "completion_tokens": 512, "decode_tok_s": 31.557}
+{"run": 7, "ttft_s": 0.346, "total_s": 15.0705, "completion_tokens": 512, "decode_tok_s": 34.704}
+{"run": 8, "ttft_s": 0.3502, "total_s": 16.3684, "completion_tokens": 512, "decode_tok_s": 31.901}
+{"run": 9, "ttft_s": 0.234, "total_s": 16.3935, "completion_tokens": 512, "decode_tok_s": 31.622}
+{"summary": true, "runs": 9, "decode_tok_s_median": 31.557, "decode_tok_s_mean": 31.302, "ttft_s_median": 0.3301}

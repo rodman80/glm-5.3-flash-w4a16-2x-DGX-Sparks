@@ -8,8 +8,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-[ -f "$SCRIPT_DIR/.env" ] || cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-set -a; source "$SCRIPT_DIR/.env"; set +a
+ENV_FILE="${ENV_FILE:-.env}"  # ENV_FILE=.env.base for baseline A/B boots
+[ -f "$SCRIPT_DIR/$ENV_FILE" ] || cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/$ENV_FILE"
+set -a; source "$SCRIPT_DIR/$ENV_FILE"; set +a
 
 NODE_RANK="${1:?usage: $0 <0|1>}"
 [[ "$NODE_RANK" == "0" || "$NODE_RANK" == "1" ]] || { echo "rank must be 0 or 1" >&2; exit 2; }
@@ -42,7 +43,6 @@ SPEC_METHOD="${SPEC_METHOD:-dflash}"
 DFLASH_TOKENS="${DFLASH_TOKENS:-7}"
 MTP_TOKENS="${MTP_TOKENS:-2}"
 MOE_BACKEND="${MOE_BACKEND:-}"
-ENABLE_EXPERT_PARALLEL="${ENABLE_EXPERT_PARALLEL:-0}"
 
 HEAD_CX7_IF="${HEAD_CX7_IF:-enp1s0f0np0}"
 WORKER_CX7_IF="${WORKER_CX7_IF:-enp1s0f0np0}"
@@ -157,10 +157,14 @@ if [ "${GLM53_SM121_MLA:-0}" = "1" ]; then
   fi
 fi
 
-# Optional MoE backend / expert parallel
+# Optional MoE backend
 MOE_ARGS=()
 if [ -n "$MOE_BACKEND" ]; then MOE_ARGS=(--moe-backend "$MOE_BACKEND"); fi
-if [ "$ENABLE_EXPERT_PARALLEL" = "1" ]; then MOE_ARGS+=(--enable-expert-parallel); fi
+
+# Async scheduling: sobrepoe scheduling de CPU com execucao da GPU.
+# Default off in this build; 1 = --async-scheduling.
+SCHED_ARGS=()
+if [ "${ASYNC_SCHEDULING:-0}" = "1" ]; then SCHED_ARGS=(--async-scheduling); fi
 
 # KV cache memory: empty = let the profiler size it (Tony's safe fallback)
 KV_ARGS=()
@@ -184,7 +188,6 @@ if [ "${DISABLE_FLASHINFER_AUTOTUNE:-0}" = "1" ]; then AUTOTUNE_ARGS=(--no-enabl
 if [ "$SPEC_METHOD" = "dflash" ]; then
   if [ "${GLM53_SM121_MLA:-0}" = "1" ]; then
     SPEC_JSON="{\"method\":\"dflash\",\"model\":\"$DFLASH_PATH\",\"num_speculative_tokens\":$DFLASH_TOKENS,\"kv_cache_dtype\":\"auto\"}"
-    echo "[sm121] drafter KV forced to auto (target stays $KV_CACHE_DTYPE -> fp8_ds_mla)"
   else
     SPEC_JSON="{\"method\":\"dflash\",\"model\":\"$DFLASH_PATH\",\"num_speculative_tokens\":$DFLASH_TOKENS}"
   fi
@@ -236,6 +239,8 @@ docker run --gpus all -d \
   -e NCCL_NVLS_ENABLE=0 -e NCCL_CROSS_NIC=0 -e NCCL_IB_MERGE_NICS=0 \
   -e NCCL_CUMEM_ENABLE=0 -e NCCL_IGNORE_CPU_AFFINITY=1 -e NCCL_DEBUG=WARN \
   -e TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
+  -e VLLM_MARLIN_USE_ATOMIC_ADD="${VLLM_MARLIN_USE_ATOMIC_ADD:-0}" \
+  -e VLLM_USE_FUSED_MOE_GROUPED_TOPK="${VLLM_USE_FUSED_MOE_GROUPED_TOPK:-0}" \
   "$IMAGE" \
     "$MODEL_PATH" \
     --served-model-name "${SERVED_MODEL_NAME:-glm-5.3-flash}" \
@@ -247,6 +252,7 @@ docker run --gpus all -d \
     --max-num-seqs "$MAX_NUM_SEQS" --block-size "$BLOCK_SIZE" \
     --kv-cache-dtype "$KV_CACHE_DTYPE" "${KV_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
+    "${SCHED_ARGS[@]}" \
     "${AUTOTUNE_ARGS[@]}" \
     "${SM121_ARGS[@]}" \
     --enforce-eager --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
