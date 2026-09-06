@@ -50,6 +50,27 @@ pinned at 0.41-0.45 on every boot.
 NVFP4-only (NVFP4 lane). **Marlin by KO**, pinned in `.env`. Marlin repeated
 over 2 boots: soak 30.69 / 35.14, C6 69.4 / 66.6.
 
+Full challenger round 2026-09-05 (fresh boot/arm, P1 gate, 5× C1 + C2/C6 ×3
+waves + cold-prefill 2× + per-pos acceptance from `/metrics` deltas):
+
+| arm | result |
+|---|---|
+| humming | boot `TypeError: Humming WNA16 checkpoint schema requires
+  AutoAWQConfig or AutoGPTQConfig, got QuantizationArgs` — incompatible with
+  this compressed-tensors checkpoint, no P1 to test |
+| flashinfer_trtllm | boot `ValueError: ... does not support the deployment
+  configuration since kernel does not support current device cuda` — no
+  SM121 kernel in this build |
+| triton | boots, P1 ✓, but loses ~2× everywhere: C1 10.80 vs 19.97 (−46%),
+  C2 14.22 vs 43.10, C6 22.0 vs 78.9, prefill 5.2k 621 vs 1517 tok/s,
+  64.7k 735 vs 1646 tok/s |
+
+Acceptance profile is backend-invariant (conditional accept ~0.75–0.78 per
+position, overall 0.406 marlin / 0.423 triton — noise): the difference is pure
+step speed, including at the small-M verifier shape. **Marlin confirmed by
+measurement**, stays pinned; criterion (+5–7% C1) not met by anything
+bootable. Back on marlin.
+
 ## `max_num_batched_tokens` A/B
 
 1024-tok decode with an overlapping ~125k-tok cold prefill, 3 waves each:

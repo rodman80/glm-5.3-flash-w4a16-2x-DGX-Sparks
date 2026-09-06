@@ -3,8 +3,10 @@
 # 1) preflight 2) pull image on both nodes 3) HF download if missing 4) rsync worker 5) launch TP=2 6) health poll
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-[ -f "$SCRIPT_DIR/.env" ] || { cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"; echo "[start] .env created from .env.example — edit HEAD_IP/WORKER_IP if needed"; }
-set -a; source "$SCRIPT_DIR/.env"; set +a
+ENV_FILE="${ENV_FILE:-.env}"  # ENV_FILE=.env.base for baseline A/B boots
+export ENV_FILE
+[ -f "$SCRIPT_DIR/$ENV_FILE" ] || { cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/$ENV_FILE"; echo "[start] $ENV_FILE created from .env.example — edit HEAD_IP/WORKER_IP if needed"; }
+set -a; source "$SCRIPT_DIR/$ENV_FILE"; set +a
 
 MODEL_HOST_PATH="${MODEL_HOST_PATH:-/var/tmp/glm-5.3-flash-w4a16-mtp}"
 DFLASH_HOST_PATH="${DFLASH_HOST_PATH:-/var/tmp/models/GLM-5.3-Flash-DFlash2}"
@@ -125,7 +127,7 @@ case "$cmd" in
     ssh -o ConnectTimeout=10 "$WORKER_SSH" "sync; echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1 && echo '[ok] worker drop_caches' || echo '[warn] sudo drop_caches failed on worker'" 2>&1 | sed 's/^/[worker] /' || true
 
     echo "[launch] worker rank=1"
-    if ssh -o ConnectTimeout=30 "$WORKER_SSH" "bash -lc 'cd \"$SCRIPT_DIR\" && ./launch-glm53-w4a16-tp2-dflash2.sh 1'" 2>&1 | tail -n 30; then
+    if ssh -o ConnectTimeout=30 "$WORKER_SSH" "bash -lc 'cd \"$SCRIPT_DIR\" && ENV_FILE=\"$ENV_FILE\" ./launch-glm53-w4a16-tp2-dflash2.sh 1'" 2>&1 | tail -n 30; then
       echo "[launch] worker ok"
     else
       echo "[launch] worker via script failed — trying direct docker (fallback)"
@@ -152,6 +154,10 @@ case "$cmd" in
       if [ "$t" -ge "$READY_TIMEOUT" ]; then echo "timeout on /health — head docker logs:" >&2; docker logs vllm_glm53_w4a16 2>&1 | tail -n 120 >&2; exit 1; fi
     done
     echo "[health] OK — serving at http://$HEAD_IP:$PORT/v1  (model: $SERVED_MODEL_NAME)"
+    if [ "${LOCK_CLOCKS:-1}" = "1" ]; then
+      echo "[clocks] locking GB10 clocks to max (perf recipe step)"
+      "$SCRIPT_DIR/clocks.sh" "${CLOCK_MHZ:-2400}" 2>&1 | tail -n 6 || echo "[warn] clocks.sh failed — serving continues at stock clocks" >&2
+    else echo "[clocks] LOCK_CLOCKS=0 — skipped (stock clocks)"; fi
     echo "Test: curl http://$HEAD_IP:$PORT/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"$SERVED_MODEL_NAME\",\"messages\":[{\"role\":\"user\",\"content\":\"2+2=?\"}],\"max_tokens\":40,\"chat_template_kwargs\":{\"enable_thinking\":false}}'"
     ;;
   stop)

@@ -1,0 +1,39 @@
+{
+ "conc": 6,
+ "requests": 6,
+ "total_tokens": 3072,
+ "wall_s": 39.03,
+ "aggregate_tok_s": 78.72,
+ "per_request": [
+  {
+   "req": 3,
+   "tokens": 512,
+   "wall_s": 32.35
+  },
+  {
+   "req": 2,
+   "tokens": 512,
+   "wall_s": 32.92
+  },
+  {
+   "req": 5,
+   "tokens": 512,
+   "wall_s": 37.75
+  },
+  {
+   "req": 4,
+   "tokens": 512,
+   "wall_s": 38.19
+  },
+  {
+   "req": 1,
+   "tokens": 512,
+   "wall_s": 38.38
+  },
+  {
+   "req": 0,
+   "tokens": 512,
+   "wall_s": 39.03
+  }
+ ]
+}
