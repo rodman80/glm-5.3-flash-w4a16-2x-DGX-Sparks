@@ -71,28 +71,28 @@ block-size, KV pin, prefix cache):
 | `.env.example` | all knobs (copy to `.env` and adapt IPs/paths) |
 | `PARAMS.md` | verbatim HF checkpoint parameters |
 | `chat_template_mm.jinja` | vision chat template (not shipped on the HF repo — see Credits) |
-| `clocks.sh` | trava os clocks GB10 em 2400 MHz nos 2 nos (hook automatico no `start.sh`) |
+| `clocks.sh` | locks GB10 clocks at 2400 MHz on both nodes (auto hook in `start.sh`) |
 | `bench/` | benchmark harness (`bench_config.sh`, decode/concurrency/prefill/prefix/acceptance probes) |
 | `benchmarks/` | curated results + `RESULTS.md` + `COMPARISON.md` (3-way head-to-head vs EXL3/NVFP4); per-wave data for the validated recipe in `final-recipe/` |
 | `docs/` | SM121 top-k patch, hybrid prefix-cache patch + generator, SM120 sparse-MLA investigation + overlay generator |
 
 ## Performance tuning
 
-Alem da receita default, estes ganhos foram medidos A/B no nosso par (detalhes e
-becos-sem-saida em `benchmarks/perf-exp/EXP-LOG.md`):
+Beyond the default recipe, these gains were A/B measured on our pair (details and
+dead ends in `benchmarks/perf-exp/EXP-LOG.md`):
 
-- **Clocks GB10 em 2400 MHz** (`./clocks.sh`, hook no `start.sh`): +5–7% decode,
-  +2–3% prefill, sem calor excessivo. Reset p/ stock: `./clocks.sh reset`.
-- **`--async-scheduling`**: +2–3% decode, sem regressoes. Default off na build.
+- **GB10 clocks at 2400 MHz** (`./clocks.sh`, hooked in `start.sh`): +5–7% decode,
+  +2–3% prefill, no excessive heat. Reset to stock: `./clocks.sh reset`.
+- **`--async-scheduling`**: +2–3% decode, no regressions. Default off in the build.
 - **Micro opts** (`VLLM_MARLIN_USE_ATOMIC_ADD=1`, `VLLM_USE_FUSED_MOE_GROUPED_TOPK=1`):
-  efeito ~0, ativas e inofensivas.
-- Combinado honesto: **~+8–11% decode C1, +3% C6, +2% prefill**, sem regressoes.
-- **Nao usar**: `--enable-expert-parallel` (−6% prefill, −3% C6),
-  cudagraphs (neutro/pior sob carga), draft com KV bf16 (derruba acceptance
-  0.42→0.33), blocos 1152/4608 (quebram prefix hits), chunks ≠ 8192.
-- Teto estrutural: quant INT4-GPTQ nao usa os fast paths Blackwell (FP4); MLA
-  roda FA2 em compat; acceptance DFlash2 ~0.42 fixa. +15% single-metric nao
-  foi atingido com serving flags — vereditos por experimento em EXP-LOG.md.
+  ~0 effect, enabled and harmless.
+- Honest combined: **~+8–11% decode C1, +3% C6, +2% prefill**, no regressions.
+- **Do not use**: `--enable-expert-parallel` (−6% prefill, −3% C6),
+  cudagraphs (neutral/worse under load), draft with bf16 KV (drops acceptance
+  0.42→0.33), blocks 1152/4608 (break prefix hits), chunks ≠ 8192.
+- Structural ceiling: INT4-GPTQ quant does not use Blackwell fast paths (FP4); MLA
+  runs FA2 in compat mode; DFlash2 acceptance ~0.42 fixed. +15% single-metric was
+  not reached with serving flags — per-experiment verdicts in EXP-LOG.md.
 
 ## Requirements
 
