@@ -1,0 +1,19 @@
+{
+ "conc": 2,
+ "requests": 2,
+ "total_tokens": 1024,
+ "wall_s": 24.12,
+ "aggregate_tok_s": 42.46,
+ "per_request": [
+  {
+   "req": 0,
+   "tokens": 512,
+   "wall_s": 21.23
+  },
+  {
+   "req": 1,
+   "tokens": 512,
+   "wall_s": 24.12
+  }
+ ]
+}

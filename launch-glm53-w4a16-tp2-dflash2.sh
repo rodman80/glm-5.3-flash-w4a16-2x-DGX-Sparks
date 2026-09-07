@@ -206,6 +206,30 @@ fi
 
 docker rm -f "$NAME" 2>/dev/null || true
 
+# --- NCCL fabric (single default; DUAL_NIC=1 = validated dual-fabric) -------
+# Validated 2026-09-07 (torch NCCL probe, same image):
+#   single .24:  9.67 /  9.64 / 10.39 GB/s @ 64/256/1024MB
+#   dual .24+.25: 19.7 / 17.5 / 20.8 GB/s (channels striped IB/0+IB/1)
+# f1 ports are DOWN on these Sparks — UP 200G pair is f0 of both fabrics.
+# GID_INDEX unset under DUAL: head .24 RoCEv2=idx4, worker .24 + both .25 =idx3
+# (one index can't fit all -> NCCL auto-picks with ROCE_VERSION_NUM=2).
+# ADDR_RANGE /16 required: /24 would exclude the .25 NIC entirely.
+NCCL_HCA_ARGS=(-e NCCL_IB_HCA="$CX7_IB" -e NCCL_IB_GID_INDEX="$GID")
+NCCL_RANGE_ARGS=(-e NCCL_IB_ADDR_RANGE=10.100.24.0/24)
+NCCL_SOCK_ARGS=(-e NCCL_SOCKET_IFNAME="$CX7_IF")
+NCCL_XNIC_ARGS=(-e NCCL_CROSS_NIC=0)
+NCCL_QPS_ARGS=()
+# Default 1 since 2026-09-07 (A/B showed no regression: decode unchanged,
+# prefill +~5%); DUAL_NIC=0 restores single-NIC .24.
+if [ "${DUAL_NIC:-1}" = "1" ]; then
+  NCCL_HCA_ARGS=(-e NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0)
+  NCCL_RANGE_ARGS=(-e NCCL_IB_ADDR_RANGE=10.100.0.0/16)
+  NCCL_SOCK_ARGS=(-e NCCL_SOCKET_IFNAME=enp1s0f0np0,enP2p1s0f0np0)
+  NCCL_XNIC_ARGS=(-e NCCL_CROSS_NIC=1)
+  NCCL_QPS_ARGS=(-e NCCL_IB_QPS_PER_CONNECTION=4 -e NCCL_IB_SPLIT_DATA_ON_QPS=1)
+  echo "[nccl] DUAL_NIC=1 (rocep1s0f0+roceP2p1s0f0, cross-nic, 4qp, nogid)"
+fi
+
 echo "[launch] rank=$NODE_RANK host=$HOST_IP head=$HEAD_IP GID=$GID image=$IMAGE W4A16-MTP $MAX_MODEL_LEN KV_MEM=${KV_CACHE_MEMORY:-profiler} spec=$SPEC_METHOD moe=${MOE_BACKEND:-auto} sm121=${GLM53_SM121_MLA:-0}"
 
 set -x
@@ -231,12 +255,12 @@ docker run --gpus all -d \
   -e TORCH_CUDA_ARCH_LIST=12.1a -e FLASHINFER_CUDA_ARCH_LIST=12.1a \
   -e FLASHINFER_DISABLE_VERSION_CHECK=1 \
   -e NCCL_NET=IB -e NCCL_IB_DISABLE=0 \
-  -e NCCL_IB_HCA="$CX7_IB" -e NCCL_IB_GID_INDEX="$GID" \
+  "${NCCL_HCA_ARGS[@]}" \
   -e NCCL_IB_ROCE_VERSION_NUM=2 -e NCCL_IB_ADDR_FAMILY=AF_INET \
-  -e NCCL_IB_ADDR_RANGE=10.100.24.0/24 \
-  -e NCCL_SOCKET_IFNAME="$CX7_IF" -e GLOO_SOCKET_IFNAME="$CX7_IF" \
+  "${NCCL_RANGE_ARGS[@]}" \
+  "${NCCL_SOCK_ARGS[@]}" -e GLOO_SOCKET_IFNAME="$CX7_IF" \
   -e TP_SOCKET_IFNAME="$CX7_IF" -e MN_IF_NAME="$CX7_IF" \
-  -e NCCL_NVLS_ENABLE=0 -e NCCL_CROSS_NIC=0 -e NCCL_IB_MERGE_NICS=0 \
+  -e NCCL_NVLS_ENABLE=0 "${NCCL_XNIC_ARGS[@]}" -e NCCL_IB_MERGE_NICS=0 "${NCCL_QPS_ARGS[@]}" \
   -e NCCL_CUMEM_ENABLE=0 -e NCCL_IGNORE_CPU_AFFINITY=1 -e NCCL_DEBUG=WARN \
   -e TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
   -e VLLM_MARLIN_USE_ATOMIC_ADD="${VLLM_MARLIN_USE_ATOMIC_ADD:-0}" \
